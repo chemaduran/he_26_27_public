@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calculadora CVSS 3.1</title>
+<style>
+  :root{--bg:#f8fafc;--card:#fff;--fg:#0f172a;--muted:#64748b;--line:#cbd5e1;--acc:#0f766e;--acc2:#ccfbf1;
+        --crit:#b91c1c;--high:#ea580c;--med:#ca8a04;--low:#2563eb;--none:#64748b}
+  @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#0b1220;--card:#111a2e;--fg:#e2e8f0;--muted:#94a3b8;--line:#334155;--acc:#2dd4bf;--acc2:#134e4a}}
+  :root[data-theme="dark"]{--bg:#0b1220;--card:#111a2e;--fg:#e2e8f0;--muted:#94a3b8;--line:#334155;--acc:#2dd4bf;--acc2:#134e4a}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 "Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  main{max-width:960px;margin:0 auto;padding:20px 16px 40px}
+  h1{font-size:1.4rem;margin:0 0 4px}
+  .sub{color:var(--muted);margin:0 0 16px}
+  .grid{display:grid;grid-template-columns:1fr 300px;gap:16px}
+  @media (max-width:760px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .m{margin-bottom:12px}
+  .m h3{font-size:.9rem;margin:0 0 2px}
+  .m p{margin:0 0 6px;color:var(--muted);font-size:.8rem}
+  .opts{display:flex;flex-wrap:wrap;gap:6px}
+  .opts button{border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:8px;padding:6px 10px;font:inherit;font-size:.85rem;cursor:pointer}
+  .opts button[aria-pressed="true"]{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:700}
+  .score{font-size:3.4rem;font-weight:800;text-align:center;line-height:1}
+  .cls{text-align:center;font-weight:800;color:#fff;border-radius:8px;padding:6px;margin:8px 0 14px;transition:background .3s}
+  .gauge{height:14px;border-radius:7px;background:linear-gradient(90deg,var(--low) 0 39%,var(--med) 39% 69%,var(--high) 69% 89%,var(--crit) 89%);position:relative;margin:6px 0 18px}
+  .needle{position:absolute;top:-6px;width:4px;height:26px;background:var(--fg);border-radius:2px;transition:left .4s}
+  code{display:block;background:var(--acc2);border-radius:8px;padding:8px;font-size:.8rem;word-break:break-all}
+  .sub2{display:flex;justify-content:space-between;font-size:.85rem;margin-top:10px}
+  input{width:100%;padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--fg);font:12.5px Consolas,monospace;margin-top:8px}
+  .presets button{display:block;width:100%;text-align:left;margin-top:6px;border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:8px;padding:6px 8px;font-size:.8rem;cursor:pointer}
+  small{color:var(--muted)}
+</style>
+</head>
+<body>
+<main>
+  <h1>Calculadora CVSS v3.1 (métricas base)</h1>
+  <p class="sub">Cambia cada métrica y observa cómo varía la puntuación. Implementa la fórmula oficial de FIRST.</p>
+  <div class="grid">
+    <section class="card" id="metrics"></section>
+    <aside class="card">
+      <div class="score" id="score">0.0</div>
+      <div class="cls" id="cls">None</div>
+      <div class="gauge"><div class="needle" id="needle"></div></div>
+      <code id="vec"></code>
+      <div class="sub2"><span>Impacto: <b id="imp"></b></span><span>Explotabilidad: <b id="exp"></b></span></div>
+      <label for="paste" style="display:block;margin-top:14px;font-size:.85rem;font-weight:600">Pegar un vector del informe</label>
+      <input id="paste" placeholder="CVSS:3.1/AV:N/AC:L/...">
+      <div class="presets">
+        <p style="margin:14px 0 0;font-size:.85rem;font-weight:600">Ejemplos</p>
+        <button data-v="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H">Ejecución remota sin autenticación</button>
+        <button data-v="CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N">Fuga de información, ataque complejo</button>
+        <button data-v="CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N">XSS reflejado</button>
+        <button data-v="CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H">Escalada local de privilegios</button>
+        <button data-v="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H">Denegación de servicio remota</button>
+      </div>
+      <p><small>Recuerda: CVSS mide gravedad técnica, no riesgo.</small></p>
+    </aside>
+  </div>
+</main>
+<script>
+const M=[
+ ["AV","Attack Vector","¿Desde dónde puede atacar?",[["N","Network",.85],["A","Adjacent",.62],["L","Local",.55],["P","Physical",.2]]],
+ ["AC","Attack Complexity","¿Necesita condiciones especiales?",[["L","Low",.77],["H","High",.44]]],
+ ["PR","Privileges Required","¿Necesita estar autenticado?",[["N","None",.85],["L","Low",.62],["H","High",.27]]],
+ ["UI","User Interaction","¿Necesita que la víctima haga algo?",[["N","None",.85],["R","Required",.62]]],
+ ["S","Scope","¿El impacto sale del componente vulnerable?",[["U","Unchanged"],["C","Changed"]]],
+ ["C","Confidentiality","Impacto en la confidencialidad",[["H","High",.56],["L","Low",.22],["N","None",0]]],
+ ["I","Integrity","Impacto en la integridad",[["H","High",.56],["L","Low",.22],["N","None",0]]],
+ ["A","Availability","Impacto en la disponibilidad",[["H","High",.56],["L","Low",.22],["N","None",0]]]
+];
+const st={AV:"N",AC:"L",PR:"N",UI:"N",S:"U",C:"H",I:"H",A:"H"};
+const box=document.getElementById("metrics");
+M.forEach(([k,n,q,o])=>{
+  const d=document.createElement("div");d.className="m";
+  d.innerHTML=`<h3>${n} (${k})</h3><p>${q}</p><div class="opts" role="group" aria-label="${n}">`+o.map(([v,l])=>`<button data-k="${k}" data-v="${v}">${l} (${v})</button>`).join("")+`</div>`;
+  box.appendChild(d);
+});
+box.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;st[b.dataset.k]=b.dataset.v;render()});
+function roundup(x){const i=Math.round(x*100000);return i%10000===0?i/100000:(Math.floor(i/10000)+1)/10}
+function w(k){return M.find(m=>m[0]===k)[3].find(o=>o[0]===st[k])[2]}
+function calc(){
+  const ch=st.S==="C";
+  let pr=w("PR");if(ch&&st.PR==="L")pr=.68;if(ch&&st.PR==="H")pr=.5;
+  const iss=1-(1-w("C"))*(1-w("I"))*(1-w("A"));
+  const imp=ch?7.52*(iss-.029)-3.25*Math.pow(iss-.02,15):6.42*iss;
+  const ex=8.22*w("AV")*w("AC")*pr*w("UI");
+  const base=imp<=0?0:roundup(Math.min((ch?1.08:1)*(imp+ex),10));
+  return {base,imp:Math.max(imp,0),ex};
+}
+function cls(s){return s===0?["None","var(--none)"]:s<4?["Low","var(--low)"]:s<7?["Medium","var(--med)"]:s<9?["High","var(--high)"]:["Critical","var(--crit)"]}
+function render(){
+  document.querySelectorAll(".opts button").forEach(b=>b.setAttribute("aria-pressed",st[b.dataset.k]===b.dataset.v));
+  const r=calc(),[c,col]=cls(r.base);
+  document.getElementById("score").textContent=r.base.toFixed(1);
+  const ce=document.getElementById("cls");ce.textContent=c;ce.style.background=col;
+  document.getElementById("needle").style.left=`calc(${r.base*10}% - 2px)`;
+  document.getElementById("vec").textContent="CVSS:3.1/"+M.map(m=>m[0]+":"+st[m[0]]).join("/");
+  document.getElementById("imp").textContent=r.imp.toFixed(1);
+  document.getElementById("exp").textContent=r.ex.toFixed(1);
+}
+function load(v){
+  const parts=v.trim().replace(/^CVSS:3\.[01]\//,"").split("/");let ok=0;
+  parts.forEach(p=>{const[k,val]=p.split(":");const m=M.find(x=>x[0]===k);if(m&&m[3].some(o=>o[0]===val)){st[k]=val;ok++}});
+  if(ok)render();return ok===8;
+}
+document.getElementById("paste").addEventListener("input",e=>{e.target.style.borderColor=load(e.target.value)?"var(--acc)":"var(--line)"});
+document.querySelectorAll(".presets button").forEach(b=>b.onclick=()=>{load(b.dataset.v);document.getElementById("paste").value=b.dataset.v});
+render();
+</script>
+</body>
+</html>

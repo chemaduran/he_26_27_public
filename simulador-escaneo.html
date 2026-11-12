@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Simulador de escaneo</title>
+<style>
+  :root{--bg:#f8fafc;--card:#fff;--fg:#0f172a;--muted:#64748b;--line:#cbd5e1;--acc:#0f766e;--acc2:#ccfbf1;
+        --crit:#b91c1c;--high:#ea580c;--med:#ca8a04;--low:#2563eb;--log:#64748b;--term:#0b1220;--termfg:#a7f3d0}
+  @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#0b1220;--card:#111a2e;--fg:#e2e8f0;--muted:#94a3b8;--line:#334155;--acc:#2dd4bf;--acc2:#134e4a;--term:#020617}}
+  :root[data-theme="dark"]{--bg:#0b1220;--card:#111a2e;--fg:#e2e8f0;--muted:#94a3b8;--line:#334155;--acc:#2dd4bf;--acc2:#134e4a;--term:#020617}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 "Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  main{max-width:1000px;margin:0 auto;padding:20px 16px 40px}
+  h1{font-size:1.4rem;margin:0 0 4px}
+  p.sub{color:var(--muted);margin:0 0 18px}
+  .grid{display:grid;grid-template-columns:320px 1fr;gap:16px}
+  @media (max-width:760px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
+  label{display:block;font-weight:600;font-size:.88rem;margin:12px 0 4px}
+  select{width:100%;padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--fg);font:inherit}
+  .chk{display:flex;gap:8px;align-items:center;font-weight:600;font-size:.88rem;margin-top:14px}
+  button{margin-top:16px;width:100%;padding:10px;border:0;border-radius:8px;background:var(--acc);color:#fff;font-weight:700;font-size:1rem;cursor:pointer}
+  button:disabled{opacity:.5;cursor:wait}
+  .phases{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+  .ph{flex:1 1 120px;padding:8px;border:2px solid var(--line);border-radius:8px;font-size:.8rem;text-align:center;color:var(--muted);transition:.3s}
+  .ph.on{border-color:var(--acc);background:var(--acc2);color:var(--fg);font-weight:700}
+  .ph.done{border-color:var(--acc);color:var(--fg)}
+  .ph.skip{text-decoration:line-through;opacity:.5}
+  .bar{height:12px;background:var(--line);border-radius:6px;overflow:hidden}
+  .bar>div{height:100%;width:0;background:#16a34a;transition:width .3s}
+  pre{background:var(--term);color:var(--termfg);border-radius:8px;padding:10px;height:190px;overflow:auto;font:12.5px/1.45 Consolas,monospace;margin:12px 0}
+  .sev{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin:10px 0}
+  .sev div{border-radius:8px;padding:8px 4px;text-align:center;color:#fff;font-weight:700;font-size:.8rem}
+  .sev b{display:block;font-size:1.4rem}
+  table{width:100%;border-collapse:collapse;font-size:.85rem}
+  td,th{border-bottom:1px solid var(--line);padding:6px 4px;text-align:left;vertical-align:top}
+  .pill{display:inline-block;border-radius:999px;padding:1px 8px;color:#fff;font-size:.72rem;font-weight:700}
+  .tip{border-left:4px solid var(--acc);background:var(--acc2);padding:10px 12px;border-radius:6px;margin-top:12px;font-size:.9rem}
+  .warn{border-left-color:var(--crit)}
+  small{color:var(--muted)}
+</style>
+</head>
+<body>
+<main>
+  <h1>Simulador de escaneo con OpenVAS</h1>
+  <p class="sub">Elige la configuración y observa cómo afecta a las fases y a los resultados. Los números son <strong>ilustrativos</strong>: tus escaneos reales del laboratorio darán otros valores.</p>
+  <div class="grid">
+    <section class="card" aria-label="Configuración">
+      <label for="tgt">Target</label>
+      <select id="tgt">
+        <option value="ub">MS3 Ubuntu — 192.168.56.20</option>
+        <option value="win">MS3 Windows — 192.168.56.30</option>
+      </select>
+      <label for="alive">Alive test</label>
+      <select id="alive">
+        <option value="icmp">ICMP Ping</option>
+        <option value="arp">ARP Ping</option>
+        <option value="consider">Consider Alive</option>
+      </select>
+      <label for="ports">Port List</label>
+      <select id="ports">
+        <option value="iana">All IANA assigned TCP</option>
+        <option value="all">All TCP and Nmap top 100 UDP</option>
+      </select>
+      <label for="cfg">Scan Config</label>
+      <select id="cfg">
+        <option value="full">Full and fast</option>
+        <option value="disc">Discovery</option>
+      </select>
+      <div class="chk"><input type="checkbox" id="cred"><label for="cred" style="margin:0">Credenciales (SSH / SMB)</label></div>
+      <div class="chk"><input type="checkbox" id="badcred"><label for="badcred" style="margin:0">…pero con contraseña errónea</label></div>
+      <button id="run">▶ Start</button>
+    </section>
+    <section class="card" aria-live="polite">
+      <div class="phases" id="phases"></div>
+      <div class="bar"><div id="prog"></div></div>
+      <pre id="log">Esperando… configura la tarea y pulsa Start.</pre>
+      <div id="out"></div>
+    </section>
+  </div>
+</main>
+<script>
+const PH=["Alive test","Puertos","Servicios","Pruebas NVT","Locales (LSC)","Resultados"];
+const $=id=>document.getElementById(id);
+const phEl=$("phases");PH.forEach((p,i)=>{const d=document.createElement("div");d.className="ph";d.id="ph"+i;d.textContent=(i+1)+". "+p;phEl.appendChild(d)});
+const COL={Critical:"var(--crit)",High:"var(--high)",Medium:"var(--med)",Low:"var(--low)",Log:"var(--log)"};
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+function log(s){const l=$("log");l.textContent+="\n"+s;l.scrollTop=l.scrollHeight}
+
+const DATA={
+  ub:{ip:"192.168.56.20",ping:true,os:"Ubuntu 14.04 LTS",portsIana:14,portsAll:20,
+      remote:[["Critical","Servicio FTP con versión vulnerable conocida","21/tcp",80,"VendorFix"],
+              ["High","Aplicación web PHP desactualizada","80/tcp",80,"VendorFix"],
+              ["High","Servicio IRC con versión vulnerable conocida","6697/tcp",95,"VendorFix"],
+              ["Medium","SSL/TLS: protocolos obsoletos (TLS 1.0/1.1)","631/tcp",98,"Mitigation"],
+              ["Medium","Samba: versión desactualizada (banner)","445/tcp",80,"VendorFix"],
+              ["Low","TCP timestamps habilitados","general/tcp",80,"Mitigation"]],
+      local:[["Critical","Ubuntu USN: paquetes del sistema sin actualizar","package",97,"VendorFix"],
+             ["High","Ubuntu USN: núcleo Linux desactualizado","package",97,"VendorFix"],
+             ["High","Ubuntu USN: OpenSSL desactualizado","package",97,"VendorFix"]],
+      counts:{remote:[4,12,24,3],local:[25,110,95,8]},fpRemoved:2},
+  win:{ip:"192.168.56.30",ping:false,os:"Windows Server 2008 R2",portsIana:22,portsAll:31,
+      remote:[["Critical","SMBv1 habilitado / boletín MS17-010 sin aplicar","445/tcp",95,"VendorFix"],
+              ["Critical","Sistema operativo sin soporte del fabricante","general/tcp",80,"Mitigation"],
+              ["High","Consola de administración Java accesible en red","8080/tcp",80,"Mitigation"],
+              ["High","Servidor de búsqueda con versión vulnerable","9200/tcp",80,"VendorFix"],
+              ["Medium","RDP: cifrado débil / NLA no obligatorio","3389/tcp",98,"Mitigation"],
+              ["Medium","SNMP con comunidad por defecto","161/udp",99,"Mitigation"]],
+      local:[["Critical","Microsoft: actualizaciones de seguridad acumuladas pendientes","registry",97,"VendorFix"],
+             ["High","Software de terceros desactualizado (registro)","registry",97,"VendorFix"]],
+      counts:{remote:[6,15,20,2],local:[40,85,60,5]},fpRemoved:1}
+};
+
+async function phase(i,ms,lines){
+  $("ph"+i).classList.add("on");
+  for(const l of lines){log(l);await sleep(ms/lines.length)}
+  $("ph"+i).classList.remove("on");$("ph"+i).classList.add("done");
+  $("prog").style.width=((i+1)/PH.length*100)+"%";
+}
+function sevBox(c){return `<div class="sev">${["Critical","High","Medium","Low","Log"].map((k,i)=>`<div style="background:${COL[k]}">${k}<b>${c[i]}</b></div>`).join("")}</div>`}
+
+$("run").onclick=async()=>{
+  const t=DATA[$("tgt").value],alive=$("alive").value,ports=$("ports").value,cfg=$("cfg").value;
+  const cred=$("cred").checked,bad=$("badcred").checked;
+  $("run").disabled=true;$("out").innerHTML="";$("log").textContent="[gvmd] Task requested → queued → running";$("prog").style.width="0";
+  PH.forEach((_,i)=>$("ph"+i).className="ph");
+  const alivePass = alive==="consider" || alive==="arp" || (alive==="icmp"&&t.ping);
+  await phase(0,1200,[`[openvas] Alive test (${alive.toUpperCase()}) → ${t.ip}`, alivePass?`[openvas] ${t.ip} is alive`:`[openvas] ${t.ip} is dead — no response to ICMP`]);
+  if(!alivePass){
+    for(let i=1;i<PH.length;i++)$("ph"+i).classList.add("skip");
+    $("prog").style.width="100%";log("[gvmd] Task done in 0:00:07 — 0 hosts scanned");
+    $("out").innerHTML=sevBox([0,0,0,0,0])+`<div class="tip warn"><strong>Informe vacío.</strong> El host no responde a ping (el cortafuegos de Windows bloquea ICMP), así que el escáner lo dio por muerto y no lo escaneó. Prueba con <em>ARP Ping</em> o <em>Consider Alive</em>. Ver capítulo 6.3.</div>`;
+    $("run").disabled=false;return;
+  }
+  const nports= ports==="all"?t.portsAll:t.portsIana;
+  await phase(1,1500,[`[openvas] Port scan: ${ports==="all"?"T:1-65535, U:top100":"IANA TCP"}`,`[openvas] ${nports} open ports found`]);
+  await phase(2,1300,["[openvas] Service detection: banners, CPE","[openvas] OS: "+t.os]);
+  if(cfg==="disc"){
+    $("ph3").classList.add("skip");$("ph4").classList.add("skip");
+    await phase(5,600,["[gvmd] Discovery only — inventory stored in Assets"]);
+    $("out").innerHTML=sevBox([0,0,0,0,nports+8])+`<div class="tip"><strong>Discovery</strong> solo inventaria: ${nports} puertos, servicios y SO como resultados <em>Log</em>. No ejecuta pruebas de vulnerabilidad.</div>`;
+    $("run").disabled=false;return;
+  }
+  await phase(3,2200,["[openvas] Launching NVTs (Full and fast, safe_checks=yes)","[openvas] families: Web, FTP, SMB, SSL/TLS, Databases …","[openvas] …"]);
+  const authOk=cred&&!bad;
+  if(cred){await phase(4,1200,[`[openvas] ${t===DATA.ub?"SSH":"SMB"} login as vagrant …`, authOk?"[openvas] Login successful — collecting package/registry list":"[openvas] Login FAILED — local checks skipped"]);}
+  else{$("ph4").classList.add("skip")}
+  await phase(5,600,["[gvmd] Results stored. Task done."]);
+
+  let c=t.counts.remote.slice();
+  const missFactor= ports==="iana"?0.8:1;
+  c=c.map(x=>Math.round(x*missFactor));
+  let rows=t.remote.slice(0, ports==="iana"?t.remote.length-1:t.remote.length);
+  if(authOk){c=c.map((x,i)=>x+t.counts.local[i]);rows=t.local.concat(rows);c[1]-=t.fpRemoved}
+  const logc=nports+(authOk?25:12);
+  let html=sevBox([c[0],c[1],c[2],c[3],logc]);
+  html+=`<table><thead><tr><th>Severidad</th><th>Hallazgo (ejemplo)</th><th>Ubicación</th><th>QoD</th><th>Solución</th></tr></thead><tbody>`+
+    rows.map(r=>`<tr><td><span class="pill" style="background:${COL[r[0]]}">${r[0]}</span></td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]} %</td><td>${r[4]}</td></tr>`).join("")+`</tbody></table>`;
+  const tips=[];
+  if(ports==="iana")tips.push("Con la lista <em>IANA TCP</em> se escapan servicios en puertos no estándar. Prueba <em>All TCP and Nmap top 100 UDP</em>.");
+  if(!cred)tips.push("Sin credenciales solo se ve la superficie de red y muchas detecciones dependen del banner (QoD 80 %). Activa las credenciales y compara.");
+  if(cred&&bad)tips.push("<strong>¡Ojo!</strong> El login falló: este escaneo «autenticado» en realidad no lo es. Comprueba siempre los resultados <em>Login Successful/Failed</em>.");
+  if(authOk)tips.push("Con credenciales aparecen decenas de hallazgos locales (QoD 97 %) y desaparecen algunos falsos positivos basados en banner.");
+  html+=tips.map(x=>`<div class="tip${x.includes("Ojo")?" warn":""}">${x}</div>`).join("");
+  html+=`<p><small>Valores simulados con fines didácticos.</small></p>`;
+  $("out").innerHTML=html;$("run").disabled=false;
+};
+</script>
+</body>
+</html>
